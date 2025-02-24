@@ -49,10 +49,14 @@ endif
 # Set the Operator SDK version to use. By default, what is installed on the system is used.
 # This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
 OPERATOR_SDK_VERSION ?= v1.39.1
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.31.0
+
+# Docker image configuration
+IMG_TAG_BASE ?= ghcr.io/bramba2000/opa-scaler
+IMG_VERSION = latest
+# Image URL to use all building/pushing image targets
+IMG ?= $(IMG_TAG_BASE):$(IMG_VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
