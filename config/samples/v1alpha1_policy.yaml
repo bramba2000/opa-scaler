@@ -1,0 +1,26 @@
+# An example of a policy provided as a Rego code
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+  name: policy-rego
+spec:
+  rego: |
+    package allow
+    default allow := true
+---
+# An example of a policy provided as a reference to an OCI image
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+    outcome: "deny"
+  name: policy-image
+spec:
+  image: "https://ghcr.io/example/example:latest"
+
+

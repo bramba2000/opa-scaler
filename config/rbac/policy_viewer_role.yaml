@@ -1,0 +1,23 @@
+# permissions for end users to view policies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+  name: policy-viewer-role
+rules:
+- apiGroups:
+  - opas.polimi.it
+  resources:
+  - policies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - opas.polimi.it
+  resources:
+  - policies/status
+  verbs:
+  - get

@@ -10,4 +10,12 @@ plugins:
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: opa-scaler
 repo: github.com/bramba2000/opa-scaler
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: opas.polimi.it
+  kind: Policy
+  path: github.com/bramba2000/opa-scaler/api/v1alpha1
+  version: v1alpha1
 version: "3"
