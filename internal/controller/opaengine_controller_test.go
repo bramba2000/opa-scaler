@@ -51,6 +51,9 @@ var _ = Describe("OpaEngine Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
+					Spec: opaspolimiitv1alpha1.OpaEngineSpec{
+						InstanceName: "default",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -65,6 +68,7 @@ var _ = Describe("OpaEngine Controller", func() {
 			By("Cleanup the specific resource instance OpaEngine")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully set defaults", func() {
 			resource := &opaspolimiitv1alpha1.OpaEngine{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)

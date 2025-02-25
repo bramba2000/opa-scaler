@@ -43,6 +43,9 @@ spec:
                 default: openpolicyagent/opa:latest-envoy
                 description: Image to use for the OPA engine
                 type: string
+              instanceName:
+                minLength: 1
+                type: string
               replicas:
                 default: 1
                 description: Number of replicas for the OPA engine
@@ -50,7 +53,7 @@ spec:
                 minimum: 1
                 type: integer
               resources:
-                description: ResourceRequirements describes the compute resource requirements.
+                description: Resources for the OPA engine
                 properties:
                   claims:
                     description: |-
@@ -109,7 +112,7 @@ spec:
                     type: object
                 type: object
             required:
-            - resources
+            - instanceName
             type: object
           status:
             description: OpaEngineStatus defines the observed state of OpaEngine

@@ -35,8 +35,12 @@ type OpaEngineSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	Replicas int32 `json:"replicas,omitempty"`
 
-	// +kubebuilder:optional
-	Resources corev1.ResourceRequirements `json:"resources"`
+	// Resources for the OPA engine
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:required
+	// +kubebuilder:validation:MinLength=1
+	InstanceName string `json:"instanceName"`
 }
 
 // OpaEngineStatus defines the observed state of OpaEngine
