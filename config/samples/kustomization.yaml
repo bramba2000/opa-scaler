@@ -2,4 +2,6 @@
 resources:
 - v1alpha1_policy.yaml
 - _v1alpha1_policy.yaml
+- v1alpha1_opaengine.yaml
+- _v1alpha1_opaengine.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

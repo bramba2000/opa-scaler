@@ -1,0 +1,9 @@
+apiVersion: opas.polimi.it/v1alpha1
+kind: OpaEngine
+metadata:
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+  name: opaengine-sample
+spec:
+  # TODO(user): Add fields here

@@ -1,8 +1,11 @@
----
+# permissions for end users to edit opaengines.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+  name: opaengine-editor-role
 rules:
 - apiGroups:
   - opas.polimi.it
@@ -19,14 +22,6 @@ rules:
 - apiGroups:
   - opas.polimi.it
   resources:
-  - opaengines/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - opas.polimi.it
-  resources:
   - opaengines/status
   verbs:
   - get
-  - patch
-  - update
