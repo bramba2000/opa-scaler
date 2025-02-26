@@ -21,6 +21,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -60,12 +62,16 @@ var _ = Describe("OpaEngine Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &opaspolimiitv1alpha1.OpaEngine{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			if errors.IsNotFound(err) {
+				Skip("Resource already deleted")
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance OpaEngine")
+			resource.SetFinalizers([]string{})
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 
@@ -78,19 +84,105 @@ var _ = Describe("OpaEngine Controller", func() {
 			Expect(resource.Spec.Image).To(Equal("openpolicyagent/opa:latest-envoy"))
 		})
 
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+		It("should successfully set initial condition", func() {
+			By("Checking the status of the OpaEngine before reconciliation")
+			err := k8sClient.Get(ctx, typeNamespacedName, opaengine)
+			Expect(opaengine.Status.Conditions).To(HaveLen(0))
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Reconciling the OpaEngine")
 			controllerReconciler := &OpaEngineReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
+			By("Checking the status of the OpaEngine after reconciliation")
+			err = k8sClient.Get(ctx, typeNamespacedName, opaengine)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(opaengine.Status.Conditions).To(HaveLen(1))
+			Expect(opaengine.Status.Conditions[0].Type).To(Equal("Progressing"))
+			Expect(opaengine.Status.Conditions[0].Status).To(Equal(metav1.ConditionUnknown))
+			Expect(opaengine.Status.Conditions[0].Reason).To(Equal("Reconciling"))
+			Expect(opaengine.Status.Conditions[0].Message).To(Equal("Starting reconciliation of the OpaEngine"))
+		})
+
+		It("should successfully create owned resources", func() {
+			By("Reconciling the OpaEngine")
+			controllerReconciler := &OpaEngineReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			By("Checking the deployment created")
+			deployment := &appsv1.Deployment{}
+			err = k8sClient.Get(ctx, typeNamespacedName, deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment.OwnerReferences).To(HaveLen(1))
+
+			By("Checking the service created")
+			service := &corev1.Service{}
+			err = k8sClient.Get(ctx, typeNamespacedName, service)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(service.OwnerReferences).To(HaveLen(1))
 		})
+
+		It("should successfully add finalizer", func() {
+			By("Reconciling the OpaEngine")
+			controllerReconciler := &OpaEngineReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Checking the finalizer added")
+			err = k8sClient.Get(ctx, typeNamespacedName, opaengine)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(opaengine.Finalizers).To(ContainElement("opa-scaler.polimi.it/oe-finalizer"))
+		})
+
+		It("should successfully delete resource", func() {
+			By("Reconciling the OpaEngine")
+			controllerReconciler := &OpaEngineReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, opaengine)).To(Succeed())
+
+			By("Checking the deployment created")
+			deployment := &appsv1.Deployment{}
+			err = k8sClient.Get(ctx, typeNamespacedName, deployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the specific resource instance OpaEngine")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, opaengine)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, opaengine)).To(Succeed())
+
+			By("Triggering again the reconciliation")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, typeNamespacedName, opaengine)
+				return err
+			}).Should(HaveOccurred())
+		})
+
 	})
 })
