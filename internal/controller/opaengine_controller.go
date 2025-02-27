@@ -286,6 +286,7 @@ func (r *OpaEngineReconciler) deploymentForOpaEngine(engine *opaspolimiitv1alpha
 						{
 							Name:  "opa",
 							Image: engine.Spec.Image,
+							Args:  []string{"run", "--server", "--addr", ":8181", "--log-level", "debug"},
 						},
 					},
 				},
