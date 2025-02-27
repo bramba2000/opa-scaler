@@ -51,8 +51,8 @@ spec:
                 type: string
             type: object
             x-kubernetes-validations:
-            - message: spec must contain either a non-empty rego or image
-              rule: self.rego != "" || self.image != ""
+            - message: spec must contain either rego or image
+              rule: has(self.rego) || has(self.image)
           status:
             description: PolicyStatus defines the observed state of Policy
             properties:

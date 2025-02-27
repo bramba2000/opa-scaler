@@ -24,18 +24,17 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PolicySpec defines the desired state of Policy
-// +kubebuilder:validation:XValidation:rule=`self.rego != "" || self.image != ""`,message="spec must contain either a non-empty rego or image"
+// +kubebuilder:validation:XValidation:rule="has(self.rego) || has(self.image)",message="spec must contain either rego or image"
 type PolicySpec struct {
 	// A string representing the entire rego code policy
 	// +kubebuilder:validation:Optional
-	Rego string `json:"rego,omitempty"`
+	Rego string `json:"rego,omitzero"`
 
 	// An image url representing an OCI image containing the rego code
 	// +kubebuilder:validation:Optional
-	Image string `json:"image,omitempty"`
+	Image string `json:"image,omitzero"`
 
 	// List of policies that dependen on this
-	// +kubebuilder:validation:Optional
 	Dependencies string `json:"dependencies,omitempty"`
 }
 

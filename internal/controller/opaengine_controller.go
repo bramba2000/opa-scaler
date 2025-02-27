@@ -55,6 +55,8 @@ type OpaEngineReconciler struct {
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a OpaEngine object and makes changes based on the state read
 // and what is in the OpaEngine.Spec
