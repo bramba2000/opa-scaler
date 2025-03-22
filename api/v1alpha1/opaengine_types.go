@@ -41,6 +41,10 @@ type OpaEngineSpec struct {
 	// +kubebuilder:required
 	// +kubebuilder:validation:MinLength=1
 	InstanceName string `json:"instanceName"`
+
+	// The expected lists of policies to be loaded in the OPA engine
+	// +kubebuilder:default:={[]}
+	Policies []string `json:"policies"`
 }
 
 // OpaEngineStatus defines the observed state of OpaEngine
@@ -48,6 +52,10 @@ type OpaEngineStatus struct {
 	// Represent the observations of a OpaEngine's current state
 	// OpaEngine.status.conditions.type are : "Available", "Progressing", "Degraded"
 	// OpaEngine.status.conditions.status are : "True", "False", "Unknown"
+
+	// The expected lists of policies loaded in the OPA engine
+	// +kubebuilder:default:={[]}
+	Policies []string `json:"policies"`
 
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`

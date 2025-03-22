@@ -55,6 +55,7 @@ var _ = Describe("OpaEngine Controller", func() {
 					},
 					Spec: opaspolimiitv1alpha1.OpaEngineSpec{
 						InstanceName: "default",
+						Policies:     []string{},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

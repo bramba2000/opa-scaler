@@ -46,6 +46,14 @@ spec:
               instanceName:
                 minLength: 1
                 type: string
+              policies:
+                default:
+                - '[]'
+                description: The expected lists of policies to be loaded in the OPA
+                  engine
+                items:
+                  type: string
+                type: array
               replicas:
                 default: 1
                 description: Number of replicas for the OPA engine
@@ -113,6 +121,7 @@ spec:
                 type: object
             required:
             - instanceName
+            - policies
             type: object
           status:
             description: OpaEngineStatus defines the observed state of OpaEngine
@@ -173,6 +182,15 @@ spec:
                   - type
                   type: object
                 type: array
+              policies:
+                default:
+                - '[]'
+                description: The expected lists of policies loaded in the OPA engine
+                items:
+                  type: string
+                type: array
+            required:
+            - policies
             type: object
         type: object
     served: true
