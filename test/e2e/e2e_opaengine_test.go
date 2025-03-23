@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("opaengine", Ordered, func() {
+var _ = Describe("opaengine", Ordered, Focus, func() {
 	Context("Operator", func() {
 		// projectimage stores the name of the image used in the example
 		var projectimage = "example.com/opa-scaler:v0.0.1"
@@ -33,13 +33,9 @@ var _ = Describe("opaengine", Ordered, func() {
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
 
-		AfterAll(func() {
-			By("deleting all controller resources")
+		AfterEach(func() {
+			By("deleting all opaengine resources")
 			cmd := exec.Command("kubectl", "delete", "opaengine", "--all", "-n", namespace)
-			_, _ = utils.Run(cmd)
-
-			By("removing the namespace")
-			cmd = exec.Command("kubectl", "delete", "ns", namespace)
 			_, _ = utils.Run(cmd)
 		})
 
@@ -138,6 +134,37 @@ var _ = Describe("opaengine", Ordered, func() {
 				g.Expect(out).To(ContainSubstring("not found"))
 			}
 			EventuallyWithOffset(1, verifyDeploymentService, time.Second*10, time.Second).Should(Succeed())
+		})
+
+		It("should push the policy in the spec to the engine", Focus, func() {
+			By("creating opaengine")
+			cmd := exec.Command("kubectl", "apply", "-f", "config/samples/v1alpha1_opaengine.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			cmd = exec.Command("kubectl", "wait", "deployment", "opaengine-sample", "--for", "condition=Available", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("exposing the opaengine service")
+			forward := exec.Command("kubectl", "port-forward", "svc/opaengine-sample", "8181:8181", "-n", namespace)
+			err = utils.Start(forward)
+
+			Expect(err).NotTo(HaveOccurred())
+
+			By("alter the policy in the spec")
+			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["test-policy"]}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating that the policy is pushed to the engine")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("curl", "localhost:8181/v1/policies/test-policy")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(out).To(ContainSubstring("test-policy"))
+				g.Expect(out).To(ContainSubstring("result"))
+			}).Should(Succeed())
+
 		})
 	})
 })

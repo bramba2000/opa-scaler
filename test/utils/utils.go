@@ -66,6 +66,26 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	return output, nil
 }
 
+// Run executes the provided command within this context
+func Start(cmd *exec.Cmd) error {
+	dir, _ := GetProjectDir()
+	cmd.Dir = dir
+
+	if err := os.Chdir(cmd.Dir); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "chdir dir: %s\n", err)
+	}
+
+	cmd.Env = append(os.Environ(), "GO111MODULE=on")
+	command := strings.Join(cmd.Args, " ")
+	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Errorf("%s start failed with error: (%v)", command, err)
+	}
+
+	return nil
+}
+
 // UninstallPrometheusOperator uninstalls the prometheus
 func UninstallPrometheusOperator() {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
