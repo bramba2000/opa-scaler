@@ -251,12 +251,12 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				toBeAdded[0]: "package test\n\ndefault allow = false\n",
 			}
 			logger.Info("Adding policies", "Policies", toBeAdded)
-			err := opamanager.PushPolicies(ctx, url, policies)
+			added, err := opamanager.PushPolicies(ctx, url, policies)
 			if err != nil {
 				logger.Error(err, "unable to add policies")
 				return ctrl.Result{}, err
 			}
-			engine.Status.Policies = append(engine.Status.Policies, toBeAdded...)
+			engine.Status.Policies = append(engine.Status.Policies, added...)
 			if err := r.Status().Update(ctx, engine); err != nil {
 				logger.Error(err, "unable to update OpaEngine status")
 				return ctrl.Result{}, err

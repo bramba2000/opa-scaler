@@ -61,7 +61,7 @@ var _ = Describe("opa policy manager", Ordered, func() {
 			By("pushing a policy")
 			rule := `package test
 default allow = false`
-			err := PushPolicies(context.TODO(), url, map[string]string{"policy1": rule})
+			_, err := PushPolicies(context.TODO(), url, map[string]string{"policy1": rule})
 			Expect(err).To(BeNil())
 			By("checking the policy is available in OPA")
 			resp, err := http.Get(url + "/v1/policies/policy1")
@@ -82,7 +82,7 @@ default allow = false`
 			By("pushing a policy")
 			rule := `package test
 default allow = false`
-			err := PushPolicies(context.TODO(), url, map[string]string{"policy1": rule})
+			_, err := PushPolicies(context.TODO(), url, map[string]string{"policy1": rule})
 			Expect(err).To(BeNil())
 			By("deleting the policy")
 			err = DeletePolicies(context.TODO(), url, []string{"policy1"})

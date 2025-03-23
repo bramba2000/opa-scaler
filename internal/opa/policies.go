@@ -41,28 +41,30 @@ func MergePolicies(expected, actual []string) (toBeAdded, toBeRemove []string) {
 	return toBeAdded, toBeRemove
 }
 
-func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string) error {
+func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string) ([]string, error) {
+	added := make([]string, 0, len(policies))
 	for name, policy := range policies {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, opaUrl+"/v1/policies/"+name, nil)
 		if err != nil {
-			return err
+			return added, err
 		}
 		req.Header.Set("Content-Type", "text/plain")
 		req.Body = io.NopCloser(strings.NewReader(policy))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return err
+			return added, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return fmt.Errorf("failed to push policy %s: %s", name, err)
+				return added, fmt.Errorf("failed to push policy %s: %s", name, err)
 			}
-			return fmt.Errorf("failed to push policy %s: %s\n%s", name, resp.Status, string(body))
+			return added, fmt.Errorf("failed to push policy %s: %s\n%s", name, resp.Status, string(body))
 		}
+		added = append(added, name)
 	}
-	return nil
+	return added, nil
 }
 
 func DeletePolicies(ctx context.Context, opaUrl string, policies []string) error {
