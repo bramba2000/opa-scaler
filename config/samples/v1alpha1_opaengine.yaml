@@ -16,4 +16,5 @@ spec:
       cpu: 100m
       memory: 128Mi
   instanceName: opaengine-sample
-  policies: []
+  policies:
+  - test-policy

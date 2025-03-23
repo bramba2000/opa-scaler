@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("opaengine", Ordered, Focus, func() {
+var _ = Describe("opaengine", Ordered, func() {
 	Context("Operator", func() {
 		// projectimage stores the name of the image used in the example
 		var projectimage = "example.com/opa-scaler:v0.0.1"
@@ -33,10 +33,18 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
 
+		AfterAll(func() {
+			By("remove the controller-manager")
+			cmd := exec.Command("make", "undeploy")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		})
+
 		AfterEach(func() {
-			By("deleting all opaengine resources")
-			cmd := exec.Command("kubectl", "delete", "opaengine", "--all", "-n", namespace)
-			_, _ = utils.Run(cmd)
+			By("deleting the opaengine instance")
+			cmd := exec.Command("kubectl", "delete", "opaengine", "opaengine-sample", "-n", namespace, "--ignore-not-found")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
 
 		It("should run successfully", func() {
@@ -136,18 +144,19 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 			EventuallyWithOffset(1, verifyDeploymentService, time.Second*10, time.Second).Should(Succeed())
 		})
 
-		It("should push the policy in the spec to the engine", Focus, func() {
+		It("should push the policy in the spec to the engine", func() {
 			By("creating opaengine")
 			cmd := exec.Command("kubectl", "apply", "-f", "config/samples/v1alpha1_opaengine.yaml", "-n", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-			cmd = exec.Command("kubectl", "wait", "deployment", "opaengine-sample", "--for", "condition=Available", "-n", namespace)
+			cmd = exec.Command("kubectl", "wait", "opaengine", "opaengine-sample", "--for", "condition=Available", "-n", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("exposing the opaengine service")
 			forward := exec.Command("kubectl", "port-forward", "svc/opaengine-sample", "8181:8181", "-n", namespace)
 			err = utils.Start(forward)
+			defer forward.Process.Kill()
 
 			Expect(err).NotTo(HaveOccurred())
 
@@ -158,12 +167,13 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 
 			By("validating that the policy is pushed to the engine")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("curl", "localhost:8181/v1/policies/test-policy")
+				cmd := exec.Command("curl", "-X", "GET", "http://localhost:8181/v1/policies")
 				out, err := utils.Run(cmd)
+				outs := string(out)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(out).To(ContainSubstring("test-policy"))
-				g.Expect(out).To(ContainSubstring("result"))
-			}).Should(Succeed())
+				g.Expect(outs).To(ContainSubstring("test-policy"))
+				g.Expect(outs).To(ContainSubstring("result"))
+			}, time.Second*10, time.Second).Should(Succeed())
 
 		})
 	})
