@@ -85,7 +85,7 @@ default allow = false`
 			_, err := PushPolicies(context.TODO(), url, map[string]string{"policy1": rule})
 			Expect(err).To(BeNil())
 			By("deleting the policy")
-			err = DeletePolicies(context.TODO(), url, []string{"policy1"})
+			_, err = DeletePolicies(context.TODO(), url, []string{"policy1"})
 			Expect(err).To(BeNil())
 			By("checking the policy is not available in OPA")
 			resp, err := http.Get(url + "/v1/policies/policy1")

@@ -67,24 +67,26 @@ func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string
 	return added, nil
 }
 
-func DeletePolicies(ctx context.Context, opaUrl string, policies []string) error {
+func DeletePolicies(ctx context.Context, opaUrl string, policies []string) ([]string, error) {
+	removed := make([]string, 0, len(policies))
 	for _, name := range policies {
 		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, opaUrl+"/v1/policies/"+name, nil)
 		if err != nil {
-			return err
+			return removed, err
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return err
+			return removed, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return fmt.Errorf("failed to delete policy %s: %s", name, err)
+				return removed, fmt.Errorf("failed to delete policy %s: %s", name, err)
 			}
-			return fmt.Errorf("failed to delete policy %s: %s\n%s", name, resp.Status, string(body))
+			return removed, fmt.Errorf("failed to delete policy %s: %s\n%s", name, resp.Status, string(body))
 		}
+		removed = append(removed, name)
 	}
-	return nil
+	return removed, nil
 }
