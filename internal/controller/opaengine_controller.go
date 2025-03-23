@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -244,7 +245,7 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// If the deployment is available, process policies
 	if foundDeployment.Status.AvailableReplicas == *foundDeployment.Spec.Replicas {
-		toBeAdded, _ := opamanager.MergePolicies(engine.Spec.Policies, engine.Status.Policies)
+		toBeAdded, toBeRemoved := opamanager.MergePolicies(engine.Spec.Policies, engine.Status.Policies)
 		url := fmt.Sprintf("http://%s.%s.svc.cluster.local:8181", engine.Name, engine.Namespace)
 		if len(toBeAdded) > 0 {
 			policies := map[string]string{
@@ -257,6 +258,21 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 			engine.Status.Policies = append(engine.Status.Policies, added...)
+			if err := r.Status().Update(ctx, engine); err != nil {
+				logger.Error(err, "unable to update OpaEngine status")
+				return ctrl.Result{}, err
+			}
+		}
+		if len(toBeRemoved) > 0 {
+			logger.Info("Removing policies", "Policies", toBeRemoved)
+			removed, err := opamanager.DeletePolicies(ctx, url, toBeRemoved)
+			if err != nil {
+				logger.Error(err, "unable to remove policies")
+				return ctrl.Result{}, err
+			}
+			engine.Status.Policies = slices.DeleteFunc(engine.Status.Policies, func(s string) bool {
+				return slices.Contains(removed, s)
+			})
 			if err := r.Status().Update(ctx, engine); err != nil {
 				logger.Error(err, "unable to update OpaEngine status")
 				return ctrl.Result{}, err
