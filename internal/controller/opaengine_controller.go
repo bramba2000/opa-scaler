@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -287,6 +288,26 @@ func (r *OpaEngineReconciler) deploymentForOpaEngine(engine *opaspolimiitv1alpha
 							Name:  "opa",
 							Image: engine.Spec.Image,
 							Args:  []string{"run", "--server", "--addr", ":8181", "--log-level", "debug"},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/health",
+										Port:   intstr.FromInt(8181),
+										Scheme: corev1.URISchemeHTTP,
+									}},
+								InitialDelaySeconds: 2,
+								PeriodSeconds:       3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/health?bundle=true",
+										Port:   intstr.FromInt(8181),
+										Scheme: corev1.URISchemeHTTP,
+									}},
+								InitialDelaySeconds: 2,
+								PeriodSeconds:       3,
+							},
 						},
 					},
 				},
