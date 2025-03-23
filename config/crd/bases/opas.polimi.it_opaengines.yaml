@@ -183,8 +183,7 @@ spec:
                   type: object
                 type: array
               policies:
-                default:
-                - '[]'
+                default: []
                 description: The expected lists of policies loaded in the OPA engine
                 items:
                   type: string

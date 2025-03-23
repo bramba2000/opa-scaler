@@ -54,7 +54,7 @@ type OpaEngineStatus struct {
 	// OpaEngine.status.conditions.status are : "True", "False", "Unknown"
 
 	// The expected lists of policies loaded in the OPA engine
-	// +kubebuilder:default:={[]}
+	// +kubebuilder:default:={}
 	Policies []string `json:"policies"`
 
 	// +operator-sdk:csv:customresourcedefinitions:type=status
