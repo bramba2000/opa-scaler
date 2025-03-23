@@ -54,9 +54,9 @@ ENVTEST_K8S_VERSION = 1.31.0
 
 # Docker image configuration
 IMG_TAG_BASE ?= ghcr.io/bramba2000/opa-scaler
-IMG_VERSION = latest
 # Image URL to use all building/pushing image targets
-IMG ?= $(IMG_TAG_BASE):$(IMG_VERSION)
+IMG ?= $(IMG_TAG_BASE):$(VERSION)
+LOCAL_IMG ?= opa-scaler:$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -148,6 +148,10 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
+.PHONY: docker-build-local
+docker-build-local: 
+	$(CONTAINER_TOOL) build -t ${LOCAL_IMG} .
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
@@ -192,6 +196,10 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+
+deploy-local: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${LOCAL_IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
