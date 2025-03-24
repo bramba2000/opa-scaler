@@ -48,10 +48,10 @@ var _ = Describe("opa policy manager", Ordered, func() {
 
 	Context("opa integration", func() {
 		var url string = "http://localhost:8181"
-		var cmd exec.Cmd
+		var cmd *exec.Cmd
 
 		BeforeEach(func() {
-			cmd := exec.Command("opa", "run", "-s")
+			cmd = exec.Command("opa", "run", "-s")
 			err := cmd.Start()
 			Expect(err).To(BeNil())
 			time.Sleep(1 * time.Second)
@@ -94,7 +94,7 @@ default allow = false`
 		})
 
 		AfterEach(func() {
-			cmd.Wait()
+			cmd.Process.Kill()
 		})
 	})
 })
