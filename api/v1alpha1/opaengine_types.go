@@ -43,7 +43,8 @@ type OpaEngineSpec struct {
 	InstanceName string `json:"instanceName"`
 
 	// The expected lists of policies to be loaded in the OPA engine
-	// +kubebuilder:default:={[]}
+	// +kubebuilder:default:={}
+	// +kubebuilder:validation:Optional
 	Policies []string `json:"policies"`
 }
 
