@@ -155,7 +155,48 @@ var _ = Describe("opaengine", Ordered, func() {
 				g.Expect(outs).To(ContainSubstring("test-policy"))
 				g.Expect(outs).To(ContainSubstring("result"))
 			}, time.Second*10, time.Second).Should(Succeed())
+		})
 
+		It("should remove the policy when spec is updated", Focus, func() {
+			By("wait for the deployment to be ready")
+			cmd := exec.Command("kubectl", "wait", "deployment", "opaengine-sample", "--for", "condition=Available", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("alter the policy in the spec")
+			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["test-policy"]}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("exposing the opaengine service")
+			forward := exec.Command("kubectl", "port-forward", "svc/opaengine-sample", "8181:8181", "-n", namespace)
+			err = utils.Start(forward)
+			defer forward.Process.Kill()
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating that the policy is pushed to the engine")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("curl", "-X", "GET", "http://localhost:8181/v1/policies")
+				out, err := utils.Run(cmd)
+				outs := string(out)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(outs).To(ContainSubstring("test-policy"))
+				g.Expect(outs).To(ContainSubstring("result"))
+			}, time.Second*10, time.Second).Should(Succeed())
+
+			By("alter the policy in the spec")
+			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": []}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating that the policy is removed from the engine")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("curl", "-X", "GET", "http://localhost:8181/v1/policies")
+				out, err := utils.Run(cmd)
+				outs := string(out)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(outs).NotTo(ContainSubstring("test-policy"))
+			}, time.Second*10, time.Second).Should(Succeed())
 		})
 	})
 
