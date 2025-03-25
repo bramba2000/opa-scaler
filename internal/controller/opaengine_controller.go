@@ -59,6 +59,7 @@ type OpaEngineReconciler struct {
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/finalizers,verbs=update
+// +kubebuilder:rbac:groups=opas.polimi.it,resources=policies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 
@@ -220,8 +221,14 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		url := fmt.Sprintf("http://%s.%s.svc.cluster.local:8181", engine.Name, engine.Namespace)
 		logger.Info("Policy situation", "ToBeAdded", toBeAdded, "ToBeRemoved", toBeRemoved, "Spec", engine.Spec.Policies, "Status", engine.Status.Policies)
 		if len(toBeAdded) > 0 {
-			policies := map[string]string{
-				toBeAdded[0]: "package test\n\ndefault allow = false\n",
+			policies := make(map[string]string)
+			for _, p := range toBeAdded {
+				code, err := r.getPolicyCode(ctx, req, p)
+				if err != nil {
+					logger.Error(err, "unable to fetch policy code")
+					return ctrl.Result{}, err
+				}
+				policies[p] = code
 			}
 			added, err := opamanager.PushPolicies(ctx, url, policies)
 			if err != nil {
@@ -382,4 +389,15 @@ func (r *OpaEngineReconciler) addCondition(ctx context.Context, req ctrl.Request
 		}
 		return nil
 	})
+}
+
+func (r *OpaEngineReconciler) getPolicyCode(ctx context.Context, req ctrl.Request, name string) (string, error) {
+	logger := log.FromContext(ctx)
+
+	policy := new(opaspolimiitv1alpha1.Policy)
+	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: name}, policy); err != nil {
+		logger.Error(err, "unable to fetch Policy")
+		return "", err
+	}
+	return policy.Spec.Rego, nil
 }

@@ -162,8 +162,13 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 			defer forward.Process.Kill()
 			Expect(err).NotTo(HaveOccurred())
 
+			By("adding the policy CR")
+			cmd = exec.Command("kubectl", "apply", "-f", "config/samples/v1alpha1_policy.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
 			By("alter the policy in the spec")
-			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["test-policy"]}}`)
+			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["policy-rego"]}}`)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -173,7 +178,7 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 				out, err := utils.Run(cmd)
 				outs := string(out)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(outs).To(ContainSubstring("test-policy"))
+				g.Expect(outs).To(ContainSubstring("policy-rego"))
 				g.Expect(outs).To(ContainSubstring("result"))
 			}, time.Second*10, time.Second).Should(Succeed())
 		})
@@ -184,8 +189,13 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("adding the policy CR")
+			cmd = exec.Command("kubectl", "apply", "-f", "config/samples/v1alpha1_policy.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
 			By("alter the policy in the spec")
-			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["test-policy"]}}`)
+			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": ["policy-rego"]}}`)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -201,7 +211,7 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 				out, err := utils.Run(cmd)
 				outs := string(out)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(outs).To(ContainSubstring("test-policy"))
+				g.Expect(outs).To(ContainSubstring("policy-rego"))
 				g.Expect(outs).To(ContainSubstring("result"))
 			}, time.Second*20, time.Second).Should(Succeed())
 
@@ -216,7 +226,7 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 				out, err := utils.Run(cmd)
 				outs := string(out)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(outs).NotTo(ContainSubstring("test-policy"))
+				g.Expect(outs).NotTo(ContainSubstring("policy-rego"))
 			}, time.Second*10, time.Second).Should(Succeed())
 		})
 	})

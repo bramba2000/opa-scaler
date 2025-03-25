@@ -54,3 +54,11 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - opas.polimi.it
+  resources:
+  - policies
+  verbs:
+  - get
+  - list
+  - watch
