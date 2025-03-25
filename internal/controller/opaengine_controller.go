@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -88,11 +89,7 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			logger.Error(err, "unable to update OpaEngine status")
 			return ctrl.Result{}, err
 		}
-
-		if err := r.Get(ctx, req.NamespacedName, engine); err != nil {
-			logger.Error(err, "unable to fetch OpaEngine")
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Add finalizer if not present
@@ -107,20 +104,6 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Check if marked to be deleted
 	if engine.GetDeletionTimestamp() != nil {
-		// Signal that the OpaEngine is being deleted
-		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
-			Type:    typeDegradedOpaEngine,
-			Status:  metav1.ConditionUnknown,
-			Reason:  "Finalizing",
-			Message: fmt.Sprintf("OpaEngine %s is being deleted", engine.Name),
-		})
-
-		if err := r.Status().Update(ctx, engine); err != nil {
-			logger.Error(err, "unable to update OpaEngine status")
-			return ctrl.Result{}, err
-		}
-
-		// TODO(user): Add the finalizer logic if needed (and re-fetch it)
 
 		// Signal that the OpaEngine finalizing work is completed
 		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
@@ -129,10 +112,6 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Reason:  "Finalizing",
 			Message: "OpaEngine finalizer completed",
 		})
-		if err := r.Status().Update(ctx, engine); err != nil {
-			logger.Error(err, "unable to update OpaEngine status")
-			return ctrl.Result{}, err
-		}
 
 		// Remove the finalizer
 		controllerutil.RemoveFinalizer(engine, OpaEngineFinalizer)
@@ -140,6 +119,8 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			logger.Error(err, "unable to remove finalizer from OpaEngine")
 			return ctrl.Result{}, err
 		}
+
+		logger.Info("OpaEngine is ready for deletion")
 
 		return ctrl.Result{}, nil
 	}
@@ -155,17 +136,12 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err != nil {
 			logger.Error(err, "unable to create service for OpaEngine")
 
-			meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
+			r.addCondition(ctx, req, metav1.Condition{
 				Type:    typeDegradedOpaEngine,
 				Status:  metav1.ConditionTrue,
 				Reason:  "ServiceError",
 				Message: "Unable to create Service for OpaEngine",
 			})
-
-			if err := r.Status().Update(ctx, engine); err != nil {
-				logger.Error(err, "unable to update OpaEngine status")
-				return ctrl.Result{}, err
-			}
 
 			return ctrl.Result{}, err
 		}
@@ -215,7 +191,7 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	} else if err != nil {
 		logger.Error(err, "unable to get Deployment for OpaEngine")
 		return ctrl.Result{}, err
@@ -223,14 +199,14 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Check if all conditions are satisfied
 	if foundDeployment.Status.AvailableReplicas == *foundDeployment.Spec.Replicas {
-		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
+		r.addCondition(ctx, req, metav1.Condition{
 			Type:    typeAvailableOpaEngine,
 			Status:  metav1.ConditionTrue,
 			Reason:  "Available",
 			Message: "OpaEngine is available",
 		})
 	} else {
-		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
+		r.addCondition(ctx, req, metav1.Condition{
 			Type:    typeAvailableOpaEngine,
 			Status:  metav1.ConditionFalse,
 			Reason:  "Unavailable",
@@ -238,38 +214,34 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		})
 	}
 
-	if err := r.Status().Update(ctx, engine); err != nil {
-		logger.Error(err, "unable to update OpaEngine status")
-		return ctrl.Result{}, err
-	}
-
 	// If the deployment is available, process policies
 	if foundDeployment.Status.AvailableReplicas == *foundDeployment.Spec.Replicas {
 		toBeAdded, toBeRemoved := opamanager.MergePolicies(engine.Spec.Policies, engine.Status.Policies)
 		url := fmt.Sprintf("http://%s.%s.svc.cluster.local:8181", engine.Name, engine.Namespace)
+		logger.Info("Policy situation", "ToBeAdded", toBeAdded, "ToBeRemoved", toBeRemoved, "Spec", engine.Spec.Policies, "Status", engine.Status.Policies)
 		if len(toBeAdded) > 0 {
 			policies := map[string]string{
 				toBeAdded[0]: "package test\n\ndefault allow = false\n",
 			}
-			logger.Info("Adding policies", "Policies", toBeAdded)
 			added, err := opamanager.PushPolicies(ctx, url, policies)
 			if err != nil {
 				logger.Error(err, "unable to add policies")
 				return ctrl.Result{}, err
 			}
+			logger.Info("Added policies", "Added", added)
 			engine.Status.Policies = append(engine.Status.Policies, added...)
-			if err := r.Status().Update(ctx, engine); err != nil {
+			if err := r.Status().Update(ctx, engine); err != nil && !apierrors.IsConflict(err) {
 				logger.Error(err, "unable to update OpaEngine status")
 				return ctrl.Result{}, err
 			}
 		}
 		if len(toBeRemoved) > 0 {
-			logger.Info("Removing policies", "Policies", toBeRemoved)
 			removed, err := opamanager.DeletePolicies(ctx, url, toBeRemoved)
 			if err != nil {
 				logger.Error(err, "unable to remove policies")
 				return ctrl.Result{}, err
 			}
+			logger.Info("Removed policies", "Policies", removed)
 			engine.Status.Policies = slices.DeleteFunc(engine.Status.Policies, func(s string) bool {
 				return slices.Contains(removed, s)
 			})
@@ -394,4 +366,20 @@ func (r *OpaEngineReconciler) serviceForOpaEngine(engine *opaspolimiitv1alpha1.O
 	}
 
 	return svc, nil
+}
+
+func (r *OpaEngineReconciler) addCondition(ctx context.Context, req ctrl.Request, condition metav1.Condition) error {
+	logger := log.FromContext(ctx)
+
+	engine := &opaspolimiitv1alpha1.OpaEngine{}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, req.NamespacedName, engine); err != nil {
+			return err
+		}
+		if changed := meta.SetStatusCondition(&engine.Status.Conditions, condition); changed {
+			logger.Info("Adding condition", "Type", condition.Type, "Status", condition.Status, "Reason", condition.Reason)
+			return r.Status().Update(ctx, engine)
+		}
+		return nil
+	})
 }

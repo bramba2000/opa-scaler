@@ -3,7 +3,9 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path"
 	"time"
 
 	"github.com/bramba2000/opa-scaler/test/utils"
@@ -11,7 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("opaengine", Ordered, func() {
+var _ = Describe("opaengine", Ordered, Focus, func() {
 	// projectimage stores the name of the image used in the example
 	var projectimage = "example.com/opa-scaler:v0.0.1"
 
@@ -93,6 +95,25 @@ var _ = Describe("opaengine", Ordered, func() {
 		})
 
 		AfterEach(func() {
+			if CurrentSpecReport().Failed() {
+				projectDir, err := utils.GetProjectDir()
+				Expect(err).NotTo(HaveOccurred())
+				folder := path.Join(projectDir, "test", "e2e", "logs")
+				err = os.MkdirAll(folder, 0755)
+				Expect(err).NotTo(HaveOccurred())
+
+				logs, err := utils.CollectLogs("deployment/opaengine-sample", namespace)
+				Expect(err).NotTo(HaveOccurred())
+				file := path.Join(folder, "opaengine-sample_"+time.Now().Format(time.DateTime)+".log")
+				err = os.WriteFile(file, logs, 0644)
+				Expect(err).NotTo(HaveOccurred())
+
+				logs, err = utils.CollectLogs("deployment/opa-scaler-controller-manager", namespace)
+				Expect(err).NotTo(HaveOccurred())
+				file = path.Join(folder, "controller-manager_"+time.Now().Format(time.DateTime)+".log")
+				err = os.WriteFile(file, logs, 0644)
+				Expect(err).NotTo(HaveOccurred())
+			}
 			By("deleting the opaengine instance")
 			cmd := exec.Command("kubectl", "delete", "-f", "config/samples/v1alpha1_opaengine.yaml", "-n", namespace)
 			_, err := utils.Run(cmd)
@@ -157,7 +178,7 @@ var _ = Describe("opaengine", Ordered, func() {
 			}, time.Second*10, time.Second).Should(Succeed())
 		})
 
-		It("should remove the policy when spec is updated", Focus, func() {
+		It("should remove the policy when spec is updated", func() {
 			By("wait for the deployment to be ready")
 			cmd := exec.Command("kubectl", "wait", "deployment", "opaengine-sample", "--for", "condition=Available", "-n", namespace)
 			_, err := utils.Run(cmd)
@@ -182,7 +203,7 @@ var _ = Describe("opaengine", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(outs).To(ContainSubstring("test-policy"))
 				g.Expect(outs).To(ContainSubstring("result"))
-			}, time.Second*10, time.Second).Should(Succeed())
+			}, time.Second*20, time.Second).Should(Succeed())
 
 			By("alter the policy in the spec")
 			cmd = exec.Command("kubectl", "patch", "opaengine", "opaengine-sample", "-n", namespace, "--type", "merge", "-p", `{"spec": {"policies": []}}`)

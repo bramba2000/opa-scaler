@@ -158,3 +158,13 @@ func GetProjectDir() (string, error) {
 	wd = strings.Replace(wd, "/test/e2e", "", -1)
 	return wd, nil
 }
+
+// Print logs of the provided namespace/name
+func CollectLogs(name string, namespace string) ([]byte, error) {
+	cmd := exec.Command("kubectl", "logs", name, "-n", namespace)
+	out, err := Run(cmd)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
