@@ -1,0 +1,10 @@
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  labels:
+    app.kubernetes.io/name: opa-scaler
+    app.kubernetes.io/managed-by: kustomize
+  name: dependency-sample
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-rego"

@@ -22,6 +22,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- dependency_editor_role.yaml
+- dependency_viewer_role.yaml
 - opaengine_editor_role.yaml
 - opaengine_viewer_role.yaml
 - policy_editor_role.yaml

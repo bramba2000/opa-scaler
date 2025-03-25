@@ -31,6 +31,8 @@ rules:
 - apiGroups:
   - opas.polimi.it
   resources:
+  - dependencies
+  - opaengine
   - opaengines
   verbs:
   - create
@@ -43,12 +45,14 @@ rules:
 - apiGroups:
   - opas.polimi.it
   resources:
+  - dependencies/finalizers
   - opaengines/finalizers
   verbs:
   - update
 - apiGroups:
   - opas.polimi.it
   resources:
+  - dependencies/status
   - opaengines/status
   verbs:
   - get
