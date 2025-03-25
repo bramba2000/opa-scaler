@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func MergePolicies(expected, actual []string) (toBeAdded, toBeRemove []string) {
@@ -42,7 +44,9 @@ func MergePolicies(expected, actual []string) (toBeAdded, toBeRemove []string) {
 }
 
 func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string) ([]string, error) {
+	logger := log.FromContext(ctx)
 	added := make([]string, 0, len(policies))
+	logger.Info("Pushing policies", "count", len(policies))
 	for name, policy := range policies {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, opaUrl+"/v1/policies/"+name, nil)
 		if err != nil {
@@ -55,6 +59,7 @@ func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string
 			return added, err
 		}
 		defer resp.Body.Close()
+		logger.Info("Pushing policy", "name", name, "status", resp.Status)
 		if resp.StatusCode != http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
