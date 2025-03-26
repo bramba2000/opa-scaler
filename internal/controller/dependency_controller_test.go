@@ -111,7 +111,16 @@ var _ = Describe("Dependency Controller", Focus, func() {
 				Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, policy))).To(Succeed())
 			})
 
-			It("should schedule the resource in the default engine when no engine is found", Focus, func() {
+			AfterEach(func() {
+				By("Cleanup the specific resource instance Policy")
+				Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
+				By("Deleting all opaengines")
+				Expect(client.IgnoreNotFound(k8sClient.DeleteAllOf(ctx, &opaspolimiitv1alpha1.OpaEngine{}))).To(Succeed())
+				By("Deleting all dependencies")
+				Expect(client.IgnoreNotFound(k8sClient.DeleteAllOf(ctx, &opaspolimiitv1alpha1.Dependency{}))).To(Succeed())
+			})
+
+			It("should schedule the resource in the default engine when no engine is found", func() {
 				By("Reconciling the created resource")
 				controllerReconciler := &DependencyReconciler{
 					Client: k8sClient,
@@ -145,26 +154,30 @@ var _ = Describe("Dependency Controller", Focus, func() {
 
 				engine := new(opaspolimiitv1alpha1.OpaEngine)
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "default-engine",
+					Name:      "default",
 					Namespace: typeNamespacedName.Namespace,
 				}, engine)).To(Succeed())
+				Expect(engine.Spec.Policies).To(ContainElement(policy.Name))
 
-				By("reconciling the resource again")
+				By("Simulating a successful policy deployment")
+				engine.Status.Policies = []string{policy.Name}
+				Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
+
+				By("Reconciling the resource again")
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				dependency := new(opaspolimiitv1alpha1.Dependency)
+				dependency = new(opaspolimiitv1alpha1.Dependency)
 				Expect(k8sClient.Get(ctx, typeNamespacedName, dependency)).To(Succeed())
 				Expect(dependency.Status.Conditions).To(HaveLen(1))
 				Expect(dependency.Status.Conditions[0].Type).To(Equal("Available"))
 				Expect(dependency.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
-				Expect(dependency.Status.Conditions[0].Reason).To(Equal("PolicyAdded"))
-				Expect(dependency.Status.Conditions[0].Message).To(ContainSubstring("default"))
+				Expect(dependency.Status.Conditions[0].Reason).To(Equal("PolicyDeployed"))
 
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "primary",
+					Name:      "default",
 					Namespace: typeNamespacedName.Namespace,
 				}, engine)).To(Succeed())
 				Expect(engine.Spec.Policies).To(ContainElement(policy.Name))

@@ -88,6 +88,7 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				Reason:  "PolicyNotFound",
 				Message: "Policy not found",
 			})
+			logger.Error(nil, "Policy "+depCR.Spec.PolicyName+"not found")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		} else {
 			logger.Error(err, "unable to fetch Policy")
@@ -95,7 +96,55 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// If name is present, check scheduled engine
+	logger.Info("Checking if scheduled engine is already deployed", "EngineName", depCR.Status.EngineName)
+	if len(depCR.Status.EngineName) > 0 {
+		logger.Info("Checking if scheduled policy is already deployed")
+		// Check if the policy is already scheduled
+		for _, engineName := range depCR.Status.EngineName {
+			engine := &opaspolimiitv1alpha1.OpaEngine{}
+			if err := r.Get(ctx, client.ObjectKey{
+				Namespace: req.Namespace,
+				Name:      engineName,
+			}, engine); err != nil {
+				logger.Error(err, "unable to fetch OpaEngine")
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+			}
+
+			// Check if the policy is already scheduled
+			for _, policy := range engine.Status.Policies {
+				if policy == depCR.Spec.PolicyName {
+					logger.Info("Policy already deployed")
+					// Set the condition
+					if err := r.addCondition(ctx, req, metav1.Condition{
+						Type:    "Available",
+						Status:  metav1.ConditionTrue,
+						Reason:  "PolicyDeployed",
+						Message: "Policy already scheduled",
+					}); err != nil {
+						logger.Error(err, "unable to set condition")
+						return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+					}
+					// Update the status
+					if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+						if err := r.Get(ctx, req.NamespacedName, depCR); err != nil {
+							return err
+						}
+						depCR.Status.Deployed = true
+						return r.Status().Update(ctx, depCR)
+					}); err != nil {
+						logger.Error(err, "unable to update status")
+						return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+					}
+					return ctrl.Result{}, nil
+				}
+			}
+		}
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+
 	// Check if there is a policy engine
+	logger.Info("Policy not scheduled, checking for policy engine")
 	engines := new(opaspolimiitv1alpha1.OpaEngineList)
 	opts := []client.ListOption{
 		client.InNamespace(req.Namespace),
@@ -148,7 +197,36 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error(err, "unable to update status")
 				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 			}
+			logger.Info("Status updated", "EngineName", depCR.Status.EngineName)
 		}
+	} else {
+		// Engine found, add the policy
+		if err := r.addPolicyToEngine(ctx, depCR.Spec.PolicyName, &engines.Items[0]); err != nil {
+			logger.Error(err, "unable to add policy to engine")
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		}
+		// Set the condition
+		if err := r.addCondition(ctx, req, metav1.Condition{
+			Type:    "Available",
+			Status:  metav1.ConditionTrue,
+			Reason:  "PolicyScheduled",
+			Message: "Policy scheduled in existing engine",
+		}); err != nil {
+			logger.Error(err, "unable to set condition")
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		}
+		// Update the status
+		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, req.NamespacedName, depCR); err != nil {
+				return err
+			}
+			depCR.Status.EngineName = append(depCR.Status.EngineName, engines.Items[0].Name)
+			return r.Status().Update(ctx, depCR)
+		}); err != nil {
+			logger.Error(err, "unable to update status")
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		}
+		logger.Info("Status updated", "EngineName", depCR.Status.EngineName)
 	}
 
 	return ctrl.Result{}, nil
