@@ -105,7 +105,7 @@ var _ = Describe("OpaEngine Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, opaengine)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(opaengine.Status.Conditions).To(HaveLen(1))
-			Expect(opaengine.Status.Conditions[0].Type).To(Equal("Progressing"))
+			Expect(opaengine.Status.Conditions[0].Type).To(Equal("Available"))
 			Expect(opaengine.Status.Conditions[0].Status).To(Equal(metav1.ConditionUnknown))
 			Expect(opaengine.Status.Conditions[0].Reason).To(Equal("Reconciling"))
 			Expect(opaengine.Status.Conditions[0].Message).To(Equal("Starting reconciliation of the OpaEngine"))

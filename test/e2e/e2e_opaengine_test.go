@@ -121,6 +121,8 @@ var _ = Describe("opaengine", Ordered, Focus, func() {
 			cmd = exec.Command("kubectl", "wait", "opaengine", "opaengine-sample", "--for", "delete", "-n", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
+
+			time.Sleep(5 * time.Second)
 		})
 
 		It("should create deployment and service", func() {

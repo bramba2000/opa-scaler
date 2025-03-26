@@ -42,8 +42,6 @@ import (
 const (
 	// typeAvailableOpaEngine is the type of the condition for an OpaEngine that is available
 	typeAvailableOpaEngine = "Available"
-	// typeProgressingOpaEngine is the type of the condition for an OpaEngine that is progressing
-	typeProgressingOpaEngine = "Progressing"
 	// typeDegradedOpaEngine is the type of the condition for an OpaEngine that is degraded
 	typeDegradedOpaEngine = "Degraded"
 )
@@ -60,8 +58,8 @@ type OpaEngineReconciler struct {
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=opaengines/finalizers,verbs=update
 // +kubebuilder:rbac:groups=opas.polimi.it,resources=policies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete;deletecollection
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;deletecollection
 
 // Reconcile reads that state of the cluster for a OpaEngine object and makes changes based on the state read
 // and what is in the OpaEngine.Spec
@@ -80,49 +78,74 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Check if never reconciled
 	if len(engine.Status.Conditions) == 0 {
-		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
-			Type:    typeProgressingOpaEngine,
+		logger.Info("First reconciliation of OPA Engine", "Name", engine.Name, "Namespace", engine.Namespace)
+		if err := r.addCondition(ctx, req, metav1.Condition{
+			Type:    "Available",
 			Status:  metav1.ConditionUnknown,
 			Reason:  "Reconciling",
 			Message: "Starting reconciliation of the OpaEngine",
-		})
-		if err := r.Status().Update(ctx, engine); err != nil {
-			logger.Error(err, "unable to update OpaEngine status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(engine, OpaEngineFinalizer) {
-		logger.Info("Adding finalizer to OpaEngine")
-		controllerutil.AddFinalizer(engine, OpaEngineFinalizer)
-		if err := r.Update(ctx, engine); err != nil {
-			logger.Error(err, "unable to add finalizer to OpaEngine")
-			return ctrl.Result{}, err
+		}); err != nil {
+			logger.Error(err, "unable to add condition to OpaEngine")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 	}
 
-	// Check if marked to be deleted
-	if engine.GetDeletionTimestamp() != nil {
+	// Process deletion
+	// - if no deletion timestamp, add finalizer
+	// - if deletion timestamp, remove finalizer
+	if engine.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Object not deleted, add finalizer if not present
+		if !controllerutil.ContainsFinalizer(engine, OpaEngineFinalizer) {
+			logger.Info("Adding finalizer to OpaEngine")
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				if err := r.Get(ctx, req.NamespacedName, engine); err != nil {
+					return err
+				}
+				controllerutil.AddFinalizer(engine, OpaEngineFinalizer)
+				return r.Update(ctx, engine)
+			}); err != nil {
+				logger.Error(err, "unable to add finalizer to OpaEngine")
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// Object deleted, remove finalizer if present
+		if controllerutil.ContainsFinalizer(engine, OpaEngineFinalizer) {
+			// Remove associate resources
+			if err := r.Delete(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      engine.Name,
+					Namespace: engine.Namespace,
+				},
+			}); err != nil {
+				logger.Error(err, "unable to delete Deployment for OpaEngine")
+				return ctrl.Result{}, err
+			}
+			if err := r.Delete(ctx, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      engine.Name,
+					Namespace: engine.Namespace,
+				},
+			}); err != nil {
+				logger.Error(err, "unable to delete Service for OpaEngine")
+				return ctrl.Result{}, err
+			}
 
-		// Signal that the OpaEngine finalizing work is completed
-		meta.SetStatusCondition(&engine.Status.Conditions, metav1.Condition{
-			Type:    typeDegradedOpaEngine,
-			Status:  metav1.ConditionTrue,
-			Reason:  "Finalizing",
-			Message: "OpaEngine finalizer completed",
-		})
-
-		// Remove the finalizer
-		controllerutil.RemoveFinalizer(engine, OpaEngineFinalizer)
-		if err := r.Update(ctx, engine); err != nil {
-			logger.Error(err, "unable to remove finalizer from OpaEngine")
-			return ctrl.Result{}, err
+			logger.Info("Removing finalizer from OpaEngine")
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				if err := r.Get(ctx, req.NamespacedName, engine); err != nil {
+					return err
+				}
+				controllerutil.RemoveFinalizer(engine, OpaEngineFinalizer)
+				return r.Update(ctx, engine)
+			}); err != nil {
+				logger.Error(err, "unable to remove finalizer from OpaEngine")
+				return ctrl.Result{}, err
+			}
 		}
 
-		logger.Info("OpaEngine is ready for deletion")
-
+		// Object is being deleted, don't process further
+		logger.Info("OpaEngine is being deleted")
 		return ctrl.Result{}, nil
 	}
 
@@ -137,12 +160,15 @@ func (r *OpaEngineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err != nil {
 			logger.Error(err, "unable to create service for OpaEngine")
 
-			r.addCondition(ctx, req, metav1.Condition{
+			if err := r.addCondition(ctx, req, metav1.Condition{
 				Type:    typeDegradedOpaEngine,
 				Status:  metav1.ConditionTrue,
 				Reason:  "ServiceError",
 				Message: "Unable to create Service for OpaEngine",
-			})
+			}); err != nil {
+				logger.Error(err, "unable to add condition to OpaEngine")
+				return ctrl.Result{}, nil
+			}
 
 			return ctrl.Result{}, err
 		}
@@ -290,6 +316,7 @@ func (r *OpaEngineReconciler) deploymentForOpaEngine(engine *opaspolimiitv1alpha
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      engine.Name,
 			Namespace: engine.Namespace,
+			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -313,7 +340,7 @@ func (r *OpaEngineReconciler) deploymentForOpaEngine(engine *opaspolimiitv1alpha
 										Port:   intstr.FromInt(8181),
 										Scheme: corev1.URISchemeHTTP,
 									}},
-								InitialDelaySeconds: 2,
+								InitialDelaySeconds: 5,
 								PeriodSeconds:       3,
 							},
 							ReadinessProbe: &corev1.Probe{
@@ -323,7 +350,7 @@ func (r *OpaEngineReconciler) deploymentForOpaEngine(engine *opaspolimiitv1alpha
 										Port:   intstr.FromInt(8181),
 										Scheme: corev1.URISchemeHTTP,
 									}},
-								InitialDelaySeconds: 2,
+								InitialDelaySeconds: 5,
 								PeriodSeconds:       3,
 							},
 						},
@@ -355,6 +382,7 @@ func (r *OpaEngineReconciler) serviceForOpaEngine(engine *opaspolimiitv1alpha1.O
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      engine.Name,
 			Namespace: engine.Namespace,
+			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: labels,

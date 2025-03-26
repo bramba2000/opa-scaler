@@ -52,9 +52,12 @@ func PushPolicies(ctx context.Context, opaUrl string, policies map[string]string
 		if err != nil {
 			return added, err
 		}
+		logger.Info("Request prepared", "Request", req)
 		req.Header.Set("Content-Type", "text/plain")
 		req.Body = io.NopCloser(strings.NewReader(policy))
+		logger.Info("Context set", "Context", ctx, "Context error", ctx.Err(), "Request", req)
 		resp, err := http.DefaultClient.Do(req)
+		logger.Info("Request sent", "Request", req)
 		if err != nil {
 			return added, err
 		}

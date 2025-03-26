@@ -30,7 +30,7 @@ import (
 	opaspolimiitv1alpha1 "github.com/bramba2000/opa-scaler/api/v1alpha1"
 )
 
-var _ = Describe("Dependency Controller", Focus, func() {
+var _ = Describe("Dependency Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
