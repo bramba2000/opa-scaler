@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,7 +31,7 @@ import (
 	opaspolimiitv1alpha1 "github.com/bramba2000/opa-scaler/api/v1alpha1"
 )
 
-var _ = Describe("Dependency Controller", func() {
+var _ = Describe("Dependency Controller", Focus, func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -61,14 +62,17 @@ var _ = Describe("Dependency Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &opaspolimiitv1alpha1.Dependency{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance Dependency")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			By("Deleting all opaengines")
+			Expect(client.IgnoreNotFound(k8sClient.DeleteAllOf(ctx, &opaspolimiitv1alpha1.OpaEngine{}))).To(Succeed())
 		})
+
 		It("should mark the resource as unavailable when no policy is found", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &DependencyReconciler{
@@ -89,54 +93,83 @@ var _ = Describe("Dependency Controller", func() {
 			Expect(dependency.Status.Conditions[0].Reason).To(Equal("PolicyNotFound"))
 		})
 
-		It("should mark the resource as available when policy engine is found", func() {
-			By("Creating the policy")
-			policy := &opaspolimiitv1alpha1.Policy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-policy",
-					Namespace: "default",
-				},
-				Spec: opaspolimiitv1alpha1.PolicySpec{
-					Rego: `package test
+		When("Policy is deployed", func() {
+			policy := &opaspolimiitv1alpha1.Policy{}
+
+			BeforeEach(func() {
+				By("Creating the policy")
+				policy = &opaspolimiitv1alpha1.Policy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-policy",
+						Namespace: "default",
+					},
+					Spec: opaspolimiitv1alpha1.PolicySpec{
+						Rego: `package test
 					default allow = false`,
-				},
-			}
-			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
-			By("Reconciling the created resource")
-			controllerReconciler := &DependencyReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+					},
+				}
+				Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, policy))).To(Succeed())
 			})
-			Expect(err).NotTo(HaveOccurred())
 
-			engine := new(opaspolimiitv1alpha1.OpaEngine)
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "default-engine",
-				Namespace: typeNamespacedName.Namespace,
-			}, engine)).To(Succeed())
+			It("should schedule the resource in the default engine when no engine is found", Focus, func() {
+				By("Reconciling the created resource")
+				controllerReconciler := &DependencyReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-			By("reconciling the resource again")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				// Dependency should have been condition available set to false
+				// and engineName set to default-engine
+				dependency := new(opaspolimiitv1alpha1.Dependency)
+				Expect(k8sClient.Get(ctx, typeNamespacedName, dependency)).To(Succeed())
+				Expect(dependency.Status.EngineName).To(ContainElement("default"))
+				Expect(dependency.Status.Conditions).To(HaveLen(1))
+				Expect(dependency.Status.Conditions[0].Type).To(Equal("Available"))
+				Expect(dependency.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 			})
-			Expect(err).NotTo(HaveOccurred())
 
-			dependency := new(opaspolimiitv1alpha1.Dependency)
-			Expect(k8sClient.Get(ctx, typeNamespacedName, dependency)).To(Succeed())
-			Expect(dependency.Status.Conditions).To(HaveLen(1))
-			Expect(dependency.Status.Conditions[0].Type).To(Equal("Available"))
-			Expect(dependency.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
-			Expect(dependency.Status.Conditions[0].Reason).To(Equal("PolicyAdded"))
-			Expect(dependency.Status.Conditions[0].Message).To(ContainSubstring("default"))
+			It("should mark the resource as available when policy engine is found", func() {
+				By("Reconciling the created resource")
+				controllerReconciler := &DependencyReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "default-engine",
-				Namespace: typeNamespacedName.Namespace,
-			}, engine)).To(Succeed())
-			Expect(engine.Spec.Policies).To(ContainElement(policy.Name))
+				engine := new(opaspolimiitv1alpha1.OpaEngine)
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "default-engine",
+					Namespace: typeNamespacedName.Namespace,
+				}, engine)).To(Succeed())
+
+				By("reconciling the resource again")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				dependency := new(opaspolimiitv1alpha1.Dependency)
+				Expect(k8sClient.Get(ctx, typeNamespacedName, dependency)).To(Succeed())
+				Expect(dependency.Status.Conditions).To(HaveLen(1))
+				Expect(dependency.Status.Conditions[0].Type).To(Equal("Available"))
+				Expect(dependency.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
+				Expect(dependency.Status.Conditions[0].Reason).To(Equal("PolicyAdded"))
+				Expect(dependency.Status.Conditions[0].Message).To(ContainSubstring("default"))
+
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "primary",
+					Namespace: typeNamespacedName.Namespace,
+				}, engine)).To(Succeed())
+				Expect(engine.Spec.Policies).To(ContainElement(policy.Name))
+			})
+
 		})
 	})
 })

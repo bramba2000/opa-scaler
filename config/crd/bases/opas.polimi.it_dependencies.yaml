@@ -110,6 +110,18 @@ spec:
                   - type
                   type: object
                 type: array
+              deployed:
+                default: false
+                description: If the dependency is deployed in EngineName
+                type: boolean
+              engineName:
+                default: []
+                description: |-
+                  The engine name where the dependency is scheduled to be deployed
+                  It can be set to a non null value even if the dependency is not deployed
+                items:
+                  type: string
+                type: array
             type: object
         type: object
     served: true

@@ -1,0 +1,111 @@
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-admin-delete
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-admin-delete"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-read-own-resource
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-read-own-resource"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-external-access
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-external-access"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-group-access
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-group-access"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-sensitive-data-write
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-sensitive-data-write"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-time-window
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-time-window"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-large-requests
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-large-requests"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-specific-namespace
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-specific-namespace"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-non-tls
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-non-tls"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-read-only-role
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-read-only-role"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-path-access
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-path-access"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-resource-type
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-resource-type"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-resource-limit
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-resource-limit"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-user-attribute
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-user-attribute"

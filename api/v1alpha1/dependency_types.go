@@ -40,6 +40,17 @@ type DependencySpec struct {
 type DependencyStatus struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	// If the dependency is deployed in EngineName
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=false
+	Deployed bool `json:"deployed,omitempty"`
+
+	// The engine name where the dependency is scheduled to be deployed
+	// It can be set to a non null value even if the dependency is not deployed
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default={}
+	EngineName []string `json:"engineName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

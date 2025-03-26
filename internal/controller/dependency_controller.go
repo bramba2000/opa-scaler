@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	opaspolimiitv1alpha1 "github.com/bramba2000/opa-scaler/api/v1alpha1"
@@ -67,6 +68,12 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Info("Default conditions set")
 	}
 
+	// Check if the dependency is already deployed
+	if depCR.Status.Deployed {
+		logger.Info("Dependency already deployed")
+		return ctrl.Result{}, nil
+	}
+
 	// Fetch the policy instance
 	policyCR := &opaspolimiitv1alpha1.Policy{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -93,52 +100,54 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	opts := []client.ListOption{
 		client.InNamespace(req.Namespace),
 	}
-	if err := r.List(ctx, engines, opts...); err != nil || len(engines.Items) == 0 {
-		if client.IgnoreNotFound(err) == nil {
-			// Policy engine not found - create default one
-			logger.Info("No OpaEngine found, creating default one")
-			newEngine := &opaspolimiitv1alpha1.OpaEngine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "default-engine",
-					Namespace: req.Namespace,
-				},
-				Spec: opaspolimiitv1alpha1.OpaEngineSpec{
-					Replicas:     1,
-					InstanceName: "default",
-				},
-			}
+	if err := r.List(ctx, engines, opts...); err != nil {
+		// If error is not found, create a new engine
+		logger.Error(err, "unable to fetch OpaEngine")
 
-			if err := r.Create(ctx, newEngine); err != nil {
-				logger.Error(err, "unable to create OpaEngine")
-				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+	} else if len(engines.Items) == 0 {
+		// No engine found, create it
+		newEngine := &opaspolimiitv1alpha1.OpaEngine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "default",
+				Namespace: req.Namespace,
+			},
+			Spec: opaspolimiitv1alpha1.OpaEngineSpec{
+				InstanceName: "default",
+			},
+		}
+		if res, err := controllerutil.CreateOrUpdate(ctx, r.Client, newEngine, func() error {
+			if newEngine.ObjectMeta.CreationTimestamp.IsZero() {
+				newEngine.Spec.Policies = []string{depCR.Spec.PolicyName}
 			} else {
-				logger.Info("OpaEngine created")
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+				newEngine.Spec.Policies = append(newEngine.Spec.Policies, depCR.Spec.PolicyName)
 			}
-		} else {
-			logger.Error(err, "unable to fetch OpaEngine")
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
-		}
-	} else {
-		logger.Info("OpaEngine found", "count", len(engines.Items))
-	}
-
-	// If at least one engine is present, add the policyCR.name to the spec.Policies
-	for _, engine := range engines.Items {
-		if err := r.addPolicyToEngine(ctx, policyCR.Name, &engine); err != nil {
-			logger.Error(err, "unable to add policy to engine")
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
-		}
-
-		logger.Info("Policy added to engine")
-		if err := r.addCondition(ctx, req, metav1.Condition{
-			Type:    "Available",
-			Status:  metav1.ConditionTrue,
-			Reason:  "PolicyAdded",
-			Message: "Policy added to engine " + engine.Name,
+			return nil
 		}); err != nil {
-			logger.Error(err, "unable to set condition")
+			logger.Error(err, "unable to create OpaEngine")
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		} else if res != controllerutil.OperationResultNone {
+			logger.Info("OpaEngine created")
+			// Set the condition
+			if err := r.addCondition(ctx, req, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Scheduled",
+				Message: "Dependency scheduled in default engine",
+			}); err != nil {
+				logger.Error(err, "unable to set condition")
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+			}
+			// Update the status
+			if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				if err := r.Get(ctx, req.NamespacedName, depCR); err != nil {
+					return err
+				}
+				depCR.Status.EngineName = append(depCR.Status.EngineName, newEngine.Name)
+				return r.Status().Update(ctx, depCR)
+			}); err != nil {
+				logger.Error(err, "unable to update status")
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+			}
 		}
 	}
 

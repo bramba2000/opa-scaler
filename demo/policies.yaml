@@ -1,0 +1,232 @@
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-admin-delete
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.operation == "DELETE"
+      input.user.roles[_] == "admin"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-read-own-resource
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.request.operation == "GET"
+      input.user.id == input.resource.owner
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-external-access
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.source.ip != "192.168.1.0/24"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-group-access
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.user.groups[_] == input.resource.allowed_groups[_]
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-sensitive-data-write
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.operation == "PUT"
+      input.resource.sensitive == true
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-time-window
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      time.now_ns() >= time.parse_duration_ns("09:00")
+      time.now_ns() <= time.parse_duration_ns("17:00")
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-large-requests
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.size > 1024 * 1024 # 1MB
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-specific-namespace
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.request.namespace == "production"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-non-tls
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.protocol != "https"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-read-only-role
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.request.operation == "GET"
+      input.user.roles[_] == "read-only"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-path-access
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.path == "/admin"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-resource-type
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.request.resource.type == "document"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-resource-limit
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      count(input.user.resources) > 10
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-user-attribute
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.user.department == "engineering"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-user-agent
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.request.headers["User-Agent"] == "malicious-bot"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-resource-label
+spec:
+  rego: |
+    package policy
+
+    allow if {
+      input.resource.labels["environment"] == "production"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-specific-user
+spec:
+  rego: |
+    package policy
+
+    deny if {
+      input.user.id == "banned-user"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-allow-resource-creation
+spec:
+  rego: |
+    package policy
+
+    allow if {
+        input.request.operation == "POST"
+    }
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Policy
+metadata:
+  name: policy-deny-ip-range
+spec:
+  rego: |
+    package policy
+
+    deny if {
+        net.cidr_contains("10.0.0.0/8", input.request.source.ip)
+    }
