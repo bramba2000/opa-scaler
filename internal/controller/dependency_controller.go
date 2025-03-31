@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,7 +114,7 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 
 			// Check if the policy is already scheduled
-			for _, policy := range engine.Status.Policies {
+			for _, policy := range engine.Spec.Policies { // Changed from Status to Spec to check desired state
 				if policy == depCR.Spec.PolicyName {
 					logger.Info("Policy already deployed")
 					// Set the condition
@@ -146,10 +148,7 @@ func (r *DependencyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Check if there is a policy engine
 	logger.Info("Policy not scheduled, checking for policy engine")
 	engines := new(opaspolimiitv1alpha1.OpaEngineList)
-	opts := []client.ListOption{
-		client.InNamespace(req.Namespace),
-	}
-	if err := r.List(ctx, engines, opts...); err != nil {
+	if err := r.List(ctx, engines, client.InNamespace(req.Namespace)); err != nil {
 		// If error is not found, create a new engine
 		logger.Error(err, "unable to fetch OpaEngine")
 
@@ -254,12 +253,91 @@ func (r *DependencyReconciler) addCondition(ctx context.Context, req ctrl.Reques
 }
 
 func (r *DependencyReconciler) addPolicyToEngine(ctx context.Context, policyName string, engine *opaspolimiitv1alpha1.OpaEngine) error {
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		if engine.Spec.Policies == nil {
-			engine.Spec.Policies = []string{policyName}
-		} else {
-			engine.Spec.Policies = append(engine.Spec.Policies, policyName)
+	logger := log.FromContext(ctx).WithValues("engine", client.ObjectKeyFromObject(engine))
+
+	originalPolicies := engine.Spec.Policies
+	updatedPolicies := append(originalPolicies, policyName)
+
+	if len(updatedPolicies) > 7 {
+		// Split policies into a new engine
+		numToMove := 5
+		if len(updatedPolicies) < numToMove {
+			numToMove = len(updatedPolicies)
 		}
-		return r.Update(ctx, engine)
-	})
+		policiesToMove := updatedPolicies[len(updatedPolicies)-numToMove:]
+		remainingPolicies := updatedPolicies[:len(updatedPolicies)-numToMove]
+
+		newEngineName := fmt.Sprintf("%s-part2", engine.Name)
+		newEngine := &opaspolimiitv1alpha1.OpaEngine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      newEngineName,
+				Namespace: engine.Namespace,
+			},
+			Spec: opaspolimiitv1alpha1.OpaEngineSpec{
+				InstanceName: newEngineName,
+				Policies:     policiesToMove,
+			},
+		}
+
+		// Create the new engine
+		err := r.Create(ctx, newEngine)
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logger.Error(err, "unable to create new OpaEngine for splitting")
+				return err
+			}
+			logger.Info("New OpaEngine already exists, likely due to concurrent request", "NewEngine", newEngineName)
+			// If it already exists, we need to update the original engine's policies
+			return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				if err := r.Get(ctx, client.ObjectKeyFromObject(engine), engine); err != nil {
+					return err
+				}
+				// Remove the policies that were intended to be moved
+				currentPolicies := engine.Spec.Policies
+				newRemainingPolicies := make([]string, 0, len(currentPolicies))
+				policiesToKeep := make(map[string]bool)
+				for _, p := range remainingPolicies {
+					policiesToKeep[p] = true
+				}
+				for _, p := range currentPolicies {
+					if policiesToKeep[p] {
+						newRemainingPolicies = append(newRemainingPolicies, p)
+					}
+				}
+				engine.Spec.Policies = newRemainingPolicies
+				return r.Update(ctx, engine)
+			})
+		}
+		logger.Info("Created new OpaEngine for splitting", "NewEngine", newEngineName, "Policies", policiesToMove)
+
+		// Update the original engine's policies
+		return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(engine), engine); err != nil {
+				return err
+			}
+			// Remove the policies that were moved
+			currentPolicies := engine.Spec.Policies
+			newRemainingPolicies := make([]string, 0, len(currentPolicies))
+			policiesToRemove := make(map[string]bool)
+			for _, p := range policiesToMove {
+				policiesToRemove[p] = true
+			}
+			for _, p := range currentPolicies {
+				if !policiesToRemove[p] {
+					newRemainingPolicies = append(newRemainingPolicies, p)
+				}
+			}
+			engine.Spec.Policies = newRemainingPolicies
+			return r.Update(ctx, engine)
+		})
+	} else {
+		// Add the policy to the engine if the limit is not exceeded
+		return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(engine), engine); err != nil {
+				return err
+			}
+			engine.Spec.Policies = updatedPolicies
+			return r.Update(ctx, engine)
+		})
+	}
 }

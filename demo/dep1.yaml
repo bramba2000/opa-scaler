@@ -1,0 +1,47 @@
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-admin-delete
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-admin-delete"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-read-own-resource
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-read-own-resource"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-external-access
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-external-access"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-group-access
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-group-access"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-deny-sensitive-data-write
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-deny-sensitive-data-write"
+---
+apiVersion: opas.polimi.it/v1alpha1
+kind: Dependency
+metadata:
+  name: dependency-allow-time-window
+spec:
+  serviceName: "opa-scaler"
+  policyName: "policy-allow-time-window"
